@@ -1,0 +1,18 @@
+#!/bin/bash
+# unifi-pkg setup — verifies prerequisites for UniFi automation.
+# UniFi units use Terraform resources only (no Ansible playbooks or tg-scripts).
+# No extra system tools are needed beyond the core tools installed by default/setup
+# (python3, opentofu, terragrunt).
+
+set -euo pipefail
+
+GIT_ROOT="$(git rev-parse --show-toplevel)"
+. "$GIT_ROOT/set_env.sh"
+
+echo "=== unifi-pkg setup ==="
+if ! command -v tofu >/dev/null 2>&1; then
+    echo "  tofu not found — running _framework-pkg setup to install prerequisites..."
+    "$GIT_ROOT/infra/_framework-pkg/_setup/run"
+fi
+echo "  tofu: $(tofu version 2>&1 | head -1)"
+echo "=== unifi-pkg setup complete ==="

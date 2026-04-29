@@ -1,0 +1,160 @@
+#!/bin/bash
+
+################################################################################
+# Boiler plate
+################################################################################
+
+# uncomment this for debugging
+#set -x
+
+# Aggressively catch and report errors
+set -euo pipefail
+function handle_error {
+    local exit_status=$?
+    echo "An error occurred on line $LINENO: $BASH_COMMAND"
+    exit $exit_status
+}
+trap handle_error ERR
+
+# Set Config variables
+. $(git rev-parse --show-toplevel)/set_env.sh
+
+# Path to this script
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+
+# Utility functions
+. $_UTILITIES_DIR/bash/init.sh
+
+################################################################################
+# Configuration
+################################################################################
+
+# Reuse maas/configure-server's venv — same Ansible version and requirements.
+MAAS_SERVER_DIR="$_GIT_ROOT/infra/maas-pkg/_tg_scripts/maas/configure-server"
+
+################################################################################
+# Functions
+################################################################################
+
+function show_usage()
+{
+    printf "Usage: $0 <command>\n"
+    cat <<EOF
+    -b|--build           Set up Python/Ansible venv and verify prerequisites
+    -t|--test            Run UniFi networking verification (config vs live state)
+    -d|--deps            Install Python and Ansible requirements only
+    -c|--clean           Remove generated tmp files (local artifacts only)
+    -C|--clean-all       Remove tmp files (venv is shared; not removed)
+    -s|--status          Show available playbooks
+    -h|--help            Show this help
+
+    Example:
+      $0 --test
+EOF
+  exit 1
+}
+
+if [[ $# -lt 1 ]]; then
+    show_usage "$@"
+fi
+
+setup_python() {
+    # Reuse the venv from maas/configure-server (Ansible already installed there).
+    _activate_ansible_locally "$MAAS_SERVER_DIR"
+}
+
+install_collections() {
+    ansible-galaxy collection install community.sops --upgrade
+}
+
+run_ansible() {
+    local PLAYBOOK="$1"
+    shift
+    cd "$SCRIPT_DIR"
+    ANSIBLE_HOST_KEY_CHECKING=False \
+    ANSIBLE_PYTHON_INTERPRETER=auto \
+        ansible-playbook "$PLAYBOOK" "$@"
+}
+
+################################################################################
+# Boiler plate make targets
+################################################################################
+
+function deps() {
+    echo "deps"
+    setup_python
+    install_collections
+}
+
+function build() {
+    echo "build"
+    setup_python
+    install_collections
+}
+
+function test_app() {
+    echo "test"
+    setup_python
+    install_collections
+    run_ansible "playbook.verify-unifi-networking.yaml" "$@"
+}
+
+function clean() {
+    echo "clean"
+    rm -f /tmp/verify-unifi-networking-config.json
+}
+
+function clean_all() {
+    echo "clean_all"
+    clean
+    # The venv lives in maas/configure-server and is shared; not removed here.
+}
+
+function show_status() {
+    echo "status"
+    echo "Available playbooks:"
+    for f in "$SCRIPT_DIR"/playbook.*.yaml; do
+        echo "  $(basename "$f" .yaml | sed 's/^playbook\.//')"
+    done
+}
+
+################################################################################
+# Process run arguments
+################################################################################
+while [[ $# -gt 0 ]]; do
+  key="$1"
+
+  case $key in
+    -c|--clean)
+        shift
+        clean
+        ;;
+    -C|--clean-all)
+        shift
+        clean_all
+        ;;
+    -b|--build)
+        shift
+        build
+        ;;
+    -t|--test)
+        shift
+        test_app "$@"
+        break
+        ;;
+    -s|--status)
+        shift
+        show_status
+        ;;
+    -d|--deps)
+        shift
+        deps
+        ;;
+    -h|--help)
+        show_usage
+      ;;
+    *)
+      shift # ignore
+      ;;
+  esac
+done

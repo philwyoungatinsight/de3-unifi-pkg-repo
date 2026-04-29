@@ -1,0 +1,63 @@
+---
+# Extract UniFi config from the full framework config and expose as a localhost fact.
+#
+# Input variables (set by config_base role):
+#   _all_config_params  (dict) - flat public config_params from all packages
+#   _all_secret_params  (dict) - flat secret config_params from all packages
+#   _tg_providers       (dict) - config_params split by _provider
+#   _tg_providers_secrets (dict) - secret config_params split by _provider
+#
+# Path discovery: the UniFi provider root and sub-paths are found dynamically
+# from _tg_providers.unifi.config_params so this works across deployment packages.
+#
+# Output facts (set on localhost):
+#   _unifi_verify_config  (dict) - merged config for the verification script
+#   _unifi_secrets        (dict) - credentials (username, password)
+
+- name: Discover UniFi provider root path (has _provider_unifi_api_url)
+  ansible.builtin.set_fact:
+    _unifi_root_path: >-
+      {{
+        (_tg_providers.unifi.config_params | default({}) | dict2items
+        | selectattr('value._provider_unifi_api_url', 'defined')
+        | map(attribute='key') | list | first) | default('')
+      }}
+
+- name: Capture UniFi base config (ancestor-merged at root path)
+  ansible.builtin.set_fact:
+    _unifi_base_cfg: "{{ _unifi_root_path | ancestor_merge(_all_config_params) }}"
+    _unifi_device_cfg: >-
+      {{
+        (_tg_providers.unifi.config_params | default({}) | dict2items
+        | selectattr('key', 'match', '.*/device$')
+        | rejectattr('key', 'match', '.*/examples/.*')
+        | map(attribute='value') | list | first) | default({})
+      }}
+    _unifi_profile_cfg: >-
+      {{
+        (_tg_providers.unifi.config_params | default({}) | dict2items
+        | selectattr('key', 'match', '.*/port-profile$')
+        | rejectattr('key', 'match', '.*/examples/.*')
+        | map(attribute='value') | list | first) | default({})
+      }}
+    _unifi_secrets: >-
+      {{
+        (_tg_providers_secrets.unifi.config_params | default({})).get(_unifi_root_path, {}) | default({})
+      }}
+
+- name: Build unified verification config
+  ansible.builtin.set_fact:
+    _unifi_verify_config:
+      unifi_url: "{{ _unifi_base_cfg._provider_unifi_api_url }}"
+      devices: "{{ _unifi_device_cfg.devices }}"
+      port_profiles: "{{ _unifi_profile_cfg.port_profiles }}"
+
+- name: Validate required secrets are present
+  ansible.builtin.fail:
+    msg: >-
+      UniFi credentials not found in secrets YAML.
+      Expected: _provider_unifi_username and _provider_unifi_password at config_params path {{ _unifi_root_path }}.
+      Check infra/unifi-pkg/_config/unifi-pkg_secrets.sops.yaml or infra/pwy-home-lab-pkg/_config/pwy-home-lab-pkg_secrets.sops.yaml.
+  when: >-
+    _unifi_secrets._provider_unifi_username is not defined or
+    _unifi_secrets._provider_unifi_password is not defined

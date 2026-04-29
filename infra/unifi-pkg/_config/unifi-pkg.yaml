@@ -1,0 +1,18 @@
+unifi-pkg:
+  _provides_capability:
+  - unifi-pkg: 1.0.0
+  waves:
+  - name: network.unifi
+    description: 'Configure UniFi switch VLANs, port profiles, and device port assignments. Skipped on clean (network config is preserved across rebuilds). Test verifies VLAN IDs and tagged/untagged port profiles match the YAML config.
+
+      '
+    _skip_on_wave_run: true
+    test_ansible_playbook: network/network-test
+    update_inventory: false
+  - name: network.unifi.validate-config
+    description: 'Deep-validate the live UniFi controller state against the YAML spec: checks every configured VLAN (name, purpose, subnet, DHCP range), every port profile (native and tagged VLAN assignments resolved by VLAN ID), and every device port override (port name, assigned profile, connected NIC MAC). Read-only — no changes to controller state. Skipped on clean.
+
+      '
+    _skip_on_wave_run: true
+    test_ansible_playbook: network/network-validate-config
+    update_inventory: false

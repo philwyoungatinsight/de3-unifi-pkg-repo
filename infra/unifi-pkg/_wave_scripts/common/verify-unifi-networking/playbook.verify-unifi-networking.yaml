@@ -1,0 +1,43 @@
+---
+# Verify that the live UniFi switch configuration matches what is declared in
+# the YAML config (device MACs, port names, port profiles).
+#
+# Runs entirely on localhost — no SSH to any host required.
+# Uses only: the YAML config, the SOPS secrets, and the UniFi controller API.
+- name: Verify UniFi networking configuration
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    script_dir: "{{ playbook_dir }}"
+    tmp_config_file: "/tmp/verify-unifi-networking-config.json"
+  tasks:
+    - name: Load config_base role
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', '_ANSIBLE_ROLES_DIR') }}/config_base"
+    - name: Extract UniFi config and credentials
+      ansible.builtin.include_tasks: tasks/capture-config-fact.yaml
+
+    - name: Write verification config to temp file
+      ansible.builtin.copy:
+        content: "{{ _unifi_verify_config | to_nice_json }}"
+        dest: "{{ tmp_config_file }}"
+        mode: "0600"
+
+    - name: Run UniFi switch port verification
+      ansible.builtin.command:
+        cmd: "python3 {{ script_dir }}/scripts/verify-switch-ports.py {{ tmp_config_file }}"
+      environment:
+        UNIFI_USERNAME: "{{ _unifi_secrets._provider_unifi_username }}"
+        UNIFI_PASSWORD: "{{ _unifi_secrets._provider_unifi_password }}"
+      register: verify_result
+      failed_when: verify_result.rc != 0
+
+    - name: Show verification results
+      ansible.builtin.debug:
+        msg: "{{ verify_result.stdout_lines }}"
+
+    - name: Clean up temp config file
+      ansible.builtin.file:
+        path: "{{ tmp_config_file }}"
+        state: absent

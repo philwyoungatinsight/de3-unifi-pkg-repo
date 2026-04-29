@@ -1,0 +1,21 @@
+#!/bin/bash
+# Wave test: validate UniFi VLANs, port profiles, and device port assignments
+# against the YAML config in detail.
+set -euo pipefail
+GIT_ROOT="$(git rev-parse --show-toplevel)"
+. "$GIT_ROOT/set_env.sh"
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+. "$_UTILITIES_DIR/bash/init.sh"
+
+# Reuse the venv from maas/configure-server (Ansible already installed there).
+MAAS_SERVER_DIR="$_GIT_ROOT/infra/maas-pkg/_tg_scripts/maas/configure-server"
+_activate_ansible_locally "$MAAS_SERVER_DIR"
+ansible-galaxy collection install community.sops --upgrade 2>/dev/null | grep -v "already installed" || true
+
+echo ""
+echo "=== Wave Test: validate-unifi-config ==="
+cd "$SCRIPT_DIR"
+ANSIBLE_HOST_KEY_CHECKING=False \
+ANSIBLE_PYTHON_INTERPRETER=auto \
+    ansible-playbook "${SCRIPT_DIR}/playbook.yaml"

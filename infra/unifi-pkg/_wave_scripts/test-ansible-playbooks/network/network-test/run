@@ -1,0 +1,8 @@
+#!/bin/bash
+# Wave test: verify UniFi networking — delegates to wave-scripts/unifi/common/verify-unifi-networking
+set -euo pipefail
+GIT_ROOT="$(git rev-parse --show-toplevel)"
+. "$GIT_ROOT/set_env.sh"
+echo ""
+echo "=== Wave Test: verify-unifi-networking ==="
+"$GIT_ROOT/infra/unifi-pkg/_wave_scripts/common/verify-unifi-networking/run" --test

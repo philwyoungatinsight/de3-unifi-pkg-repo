@@ -1,0 +1,44 @@
+---
+# Validate that the live UniFi controller configuration matches the YAML spec
+# in detail: VLANs (name, purpose, subnet, DHCP), port profiles (native and
+# tagged VLANs), and device port assignments (name, profile, connected MACs).
+#
+# Runs entirely on localhost — no SSH to any host required.
+# Uses: the YAML config, the SOPS secrets, and the UniFi controller API.
+- name: Validate UniFi config matches YAML spec
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    script_dir: "{{ playbook_dir }}"
+    tmp_config_file: "/tmp/validate-unifi-config.json"
+  tasks:
+    - name: Load config_base role
+      ansible.builtin.include_role:
+        name: "{{ lookup('env', '_ANSIBLE_ROLES_DIR') }}/config_base"
+    - name: Extract UniFi config and credentials
+      ansible.builtin.include_tasks: tasks/capture-config-fact.yaml
+
+    - name: Write validation config to temp file
+      ansible.builtin.copy:
+        content: "{{ _unifi_validate_config | to_nice_json }}"
+        dest: "{{ tmp_config_file }}"
+        mode: "0600"
+
+    - name: Run UniFi config validation
+      ansible.builtin.command:
+        cmd: "python3 {{ script_dir }}/scripts/validate-unifi-config.py {{ tmp_config_file }}"
+      environment:
+        UNIFI_USERNAME: "{{ _unifi_secrets._provider_unifi_username }}"
+        UNIFI_PASSWORD: "{{ _unifi_secrets._provider_unifi_password }}"
+      register: validate_result
+      failed_when: validate_result.rc != 0
+
+    - name: Show validation results
+      ansible.builtin.debug:
+        msg: "{{ validate_result.stdout_lines }}"
+
+    - name: Clean up temp config file
+      ansible.builtin.file:
+        path: "{{ tmp_config_file }}"
+        state: absent
