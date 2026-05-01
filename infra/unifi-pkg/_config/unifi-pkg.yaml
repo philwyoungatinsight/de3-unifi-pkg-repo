@@ -16,3 +16,144 @@ unifi-pkg:
     _skip_on_wave_run: true
     test_ansible_playbook: network/network-validate-config
     update_inventory: false
+
+  config_params:
+    # ---------------------------------------------------------------------------
+    # Example deployment — illustrates the required config structure.
+    # Copy to your deployment package (e.g. pwy-home-lab-pkg) and set real values.
+    # ---------------------------------------------------------------------------
+    unifi-pkg/_stack/unifi/examples-archive:
+      _env: example
+      _provider: unifi
+      _skip_on_build: true
+      _region: example-lab
+      _provider_unifi_api_url: https://192.168.2.1   # replace with real controller URL
+      _provider_unifi_insecure: true
+      project_prefix: example
+      domain_name: homelab.local
+
+    unifi-pkg/_stack/unifi/examples-archive/example-lab/network:
+      _unit_purpose: >
+        Example UniFi VLAN definitions: cloud_public (VLAN 10, 10.0.10.0/24),
+        management (VLAN 11), provisioning (VLAN 12, MaaS DHCP), guest (VLAN 13),
+        storage (VLAN 14). Copy to your deployment package and set real VLAN IDs
+        and subnets. VLAN 1 (default) is managed by UniFi internally — do not add it.
+      _wave: network.unifi
+      vlans:
+        cloud_public:
+          dhcp_enabled: true
+          dhcp_start: 10.0.10.100
+          dhcp_stop: 10.0.10.254
+          dns_servers:
+          - 8.8.8.8
+          - 8.8.4.4
+          name: Cloud-Public
+          purpose: corporate
+          subnet: 10.0.10.0/24
+          vlan_id: 10
+        management:
+          dhcp_enabled: false
+          dns_servers:
+          - 8.8.8.8
+          - 8.8.4.4
+          name: Management
+          purpose: corporate
+          subnet: 10.0.11.0/24
+          vlan_id: 11
+        provisioning:
+          dhcp_enabled: false
+          dns_servers:
+          - 8.8.8.8
+          - 8.8.4.4
+          name: Provisioning
+          purpose: corporate
+          subnet: 10.0.12.0/24
+          vlan_id: 12
+        guest:
+          dhcp_enabled: true
+          dhcp_start: 10.0.13.100
+          dhcp_stop: 10.0.13.254
+          dns_servers:
+          - 8.8.8.8
+          - 8.8.4.4
+          internet_access_enabled: true
+          name: Guest
+          purpose: guest
+          subnet: 10.0.13.0/24
+          vlan_id: 13
+        storage:
+          dhcp_enabled: false
+          name: Storage
+          purpose: corporate
+          subnet: 10.0.14.0/24
+          vlan_id: 14
+
+    unifi-pkg/_stack/unifi/examples-archive/example-lab/port-profile:
+      _unit_purpose: >
+        Example UniFi port profiles: hypervisor_trunk (cloud_public native + management/
+        provisioning/storage tagged), amt_mgmt (management native, for AMT/IPMI NICs),
+        pxe_provisioning (provisioning native, for PXE/data NICs), public_only,
+        storage_only. Copy to your deployment package and adjust VLAN assignments.
+      _wave: network.unifi
+      port_profiles:
+        hypervisor_trunk:
+          forward: customize
+          name: Hypervisor Trunk
+          native_vlan: cloud_public
+          tagged_vlans:
+          - management
+          - provisioning
+          - storage
+        amt_mgmt:
+          forward: customize
+          name: AMT Management
+          native_vlan: management
+          tagged_vlans: []
+        pxe_provisioning:
+          forward: customize
+          name: PXE Provisioning
+          native_vlan: provisioning
+          tagged_vlans: []
+        public_only:
+          forward: customize
+          name: Public Only
+          native_vlan: cloud_public
+          tagged_vlans: []
+        storage_only:
+          forward: customize
+          name: Storage Only
+          native_vlan: storage
+          tagged_vlans: []
+
+    unifi-pkg/_stack/unifi/examples-archive/example-lab/device:
+      _unit_purpose: >
+        Example UniFi device port assignments. Shows how to map physical ports on
+        a USW-Flex-2.5G-8 and UDM to port profiles. Replace MAC addresses and port
+        numbers with your real values from the UniFi controller.
+      _wave: network.unifi
+      devices:
+        switch_flex:
+          mac: "aa:bb:cc:dd:ee:01"   # replace with real MAC from UniFi controller
+          name: USW-Flex-2.5G-8
+          type: switch
+          port_overrides:
+            "1":
+              name: host-1-port3
+              port_profile: amt_mgmt
+            "2":
+              name: host-1-port4
+              port_profile: pxe_provisioning
+            "3":
+              name: uplink
+              port_profile: ""
+        udm:
+          mac: "aa:bb:cc:dd:ee:00"   # replace with real MAC from UniFi controller
+          name: UniFi Dream Machine
+          type: gateway
+          port_overrides:
+            "1":
+              name: WAN
+              port_profile: ""
+            "2":
+              name: LAN
+              port_profile: ""
